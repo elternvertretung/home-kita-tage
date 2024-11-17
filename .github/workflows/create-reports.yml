@@ -1,0 +1,70 @@
+on:
+  schedule:
+    # Explanation of the Cron Expression:
+    # `*/5`: Every 5 minutes.
+    # `6-8`: From 06:00 AM to 08:59 AM.
+    # `*`: Every day of the month.
+    # `*`: Every month.
+    # `1-5`: Monday to Friday.
+    # - cron: '*/5 6-8 * * 1-5'
+    # Explanation of the Cron Expression:
+    # `8,18,28,38,48,58`: At these minutes.
+    # `*`: Every hour.
+    # `*`: Every day of the month.
+    # `*`: Every month.
+    # `*`: Every weekday.
+    - cron: '8,18,28,38,48,58 * * * *'
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  create-reports:
+    name: Create reports
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+      - name: Install wkhtmltopdf
+        run: |
+          sudo apt-get update
+          sudo apt-get install wkhtmltopdf
+      - name: Download HKT input Excel file from Google Drive
+        env:
+          GOOGLE_WORKSPACE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_WORKSPACE_SERVICE_ACCOUNT_KEY }}
+          INPUT_FILE_ID: ${{ vars.INPUT_FILE_ID }}
+        id: download-hkt-input-excel-file-from-google-drive
+        run: |
+          python -m hkt download-input-file /tmp/input.xlsx
+      - name: Create daily overviews
+        run: |
+          mkdir /tmp/daily_overviews
+          python -m hkt create-daily-overviews /tmp/input.xlsx /tmp/daily_overviews
+      - name: List daily overview files
+        run: |
+          ls -l /tmp/daily_overviews
+      - name: Upload daily overviews to Google Drive
+        env:
+          GOOGLE_WORKSPACE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_WORKSPACE_SERVICE_ACCOUNT_KEY }}
+          PARENT_ID: ${{ vars.PARENT_ID_DAILY_OVERVIEWS }}
+        run: |
+          python -m hkt upload-files /tmp/daily_overviews/*
+      - name: Create statistics
+        run: |
+          mkdir /tmp/stats
+          python -m hkt create-statistics /tmp/input.xlsx /tmp/stats
+      - name: List statistic files
+        run: |
+          ls -l /tmp/stats
+      - name: Upload statistics to Google Drive
+        env:
+          GOOGLE_WORKSPACE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_WORKSPACE_SERVICE_ACCOUNT_KEY }}
+          PARENT_ID: ${{ vars.PARENT_ID_STATS }}
+        run: |
+          python -m hkt upload-files /tmp/stats/*
