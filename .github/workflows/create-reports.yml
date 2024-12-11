@@ -44,7 +44,7 @@ jobs:
           python -m hkt download-input-file /tmp/input.xlsx
       - name: Create daily overviews
         run: |
-          mkdir /tmp/daily_overviews
+          mkdir -p /tmp/daily_overviews
           python -m hkt create-daily-overviews /tmp/input.xlsx /tmp/daily_overviews
       - name: List daily overview files
         run: |
@@ -57,7 +57,7 @@ jobs:
           python -m hkt upload-files /tmp/daily_overviews/*
       - name: Create statistics
         run: |
-          mkdir /tmp/stats
+          mkdir -p /tmp/stats
           python -m hkt create-statistics /tmp/input.xlsx /tmp/stats
       - name: List statistic files
         run: |
