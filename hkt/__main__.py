@@ -173,6 +173,7 @@ def download_input_file(
     except googleapiclient.errors.HttpError as error:
         print(f"An error occurred: {error}")
 
+
 @main.command()
 @click.option(
     "--google-workspace-service-account-key",
@@ -320,95 +321,84 @@ def create_statistics(
     df = _read_and_validate_input_file(input_file)
 
     for group, group_df in df.groupby("Group"):
-        report_file = output_dir / f"{group}_daily_distributions.html"
-        with report_file.open("w") as report:
-            report.write(f"<html><head><title>{group}</title></head><body>")
-            report.write(f"<h1>Group: {group}</h1>")
+        labels = []
+        home_values = []
+        not_home_values = []
 
-            labels = []
-            home_values = []
-            not_home_values = []
+        for no, day in enumerate(list(calendar.day_name)[:5], start=1):
+            morning_col = f"{day}\nmorning"
+            afternoon_col = f"{day}\nafternoon"
 
-            for no, day in enumerate(list(calendar.day_name)[:5], start=1):
-                morning_col = f"{day}\nmorning"
-                afternoon_col = f"{day}\nafternoon"
+            morning_home = group_df[morning_col].sum()
+            afternoon_home = group_df[afternoon_col].sum()
 
-                morning_home = group_df[morning_col].sum()
-                afternoon_home = group_df[afternoon_col].sum()
+            morning_total = len(group_df)
+            afternoon_total = len(group_df)
 
-                morning_total = len(group_df)
-                afternoon_total = len(group_df)
+            morning_not_home = morning_total - morning_home
+            afternoon_not_home = afternoon_total - afternoon_home
 
-                morning_not_home = morning_total - morning_home
-                afternoon_not_home = afternoon_total - afternoon_home
+            labels.extend([f"{day} morning", f"{day} afternoon"])
+            home_values.extend([morning_home, afternoon_home])
+            not_home_values.extend([morning_not_home, afternoon_not_home])
 
-                labels.extend([f"{day} morning", f"{day} afternoon"])
-                home_values.extend([morning_home, afternoon_home])
-                not_home_values.extend([morning_not_home, afternoon_not_home])
+        x = np.arange(len(labels))  # the label locations
+        width = 0.35  # the width of the bars
 
-            x = np.arange(len(labels))  # the label locations
-            width = 0.35  # the width of the bars
+        fig, ax = plt.subplots(figsize=(10, 6))
+        rects1 = ax.bar(
+            x - width / 2,
+            home_values,
+            width,
+            label="At home",
+            color="green",
+        )
+        rects2 = ax.bar(
+            x + width / 2,
+            not_home_values,
+            width,
+            label="In KITA",
+            color="red",
+        )
 
-            fig, ax = plt.subplots(figsize=(10, 6))
-            rects1 = ax.bar(
-                x - width / 2,
-                home_values,
-                width,
-                label="At home",
-                color="green",
-            )
-            rects2 = ax.bar(
-                x + width / 2,
-                not_home_values,
-                width,
-                label="In KITA",
-                color="red",
-            )
+        # Add some text for labels, title and custom x-axis tick labels, etc.
+        ax.set_ylabel("Number of children")
+        ax.set_title("Distribution")
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+        ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 
-            # Add some text for labels, title and custom x-axis tick labels, etc.
-            ax.set_ylabel("Number of children")
-            ax.set_title("Distribution")
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels, rotation=45, ha="right")
-            ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+        # Adjust the layout to make room for the legend
+        plt.subplots_adjust(right=0.75)
 
-            # Adjust the layout to make room for the legend
-            plt.subplots_adjust(right=0.75)
+        # Add numbers above the bars
+        def autolabel(rects):
+            """Attach a text label above each bar in *rects*, displaying its height."""
+            for rect in rects:
+                height = rect.get_height()
+                ax.annotate(
+                    "{}".format(int(height)),
+                    xy=(rect.get_x() + rect.get_width() / 2, height),
+                    xytext=(0, 3),  # 3 points vertical offset
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                )
 
-            # Add numbers above the bars
-            def autolabel(rects):
-                """Attach a text label above each bar in *rects*, displaying its height."""
-                for rect in rects:
-                    height = rect.get_height()
-                    ax.annotate(
-                        "{}".format(int(height)),
-                        xy=(rect.get_x() + rect.get_width() / 2, height),
-                        xytext=(0, 3),  # 3 points vertical offset
-                        textcoords="offset points",
-                        ha="center",
-                        va="bottom",
-                    )
+        autolabel(rects1)
+        autolabel(rects2)
 
-            autolabel(rects1)
-            autolabel(rects2)
+        fig.tight_layout()
 
-            fig.tight_layout()
-
-            # Save the plot to a BytesIO object
-            img_data = io.BytesIO()
-            plt.savefig(img_data, format="png")
-            plt.close(fig)
-            img_data.seek(0)
-
-            # Encode the image in base64
-            img_base64 = base64.b64encode(img_data.read()).decode("utf-8")
-
-            # Add the plot to the report
-            report.write(
-                f'<img src="data:image/png;base64,{img_base64}" alt="Weekly Statistics"><br>'
-            )
-
-            report.write("</body></html>")
+        # Save the plot to a BytesIO object
+        img_data = io.BytesIO()
+        plt.savefig(img_data, format="png")
+        plt.close(fig)
+        img_data.seek(0)
+        # store img_data in a file
+        img_file = output_dir / f"{group}_daily_distributions.png"
+        with img_file.open("wb") as f:
+            f.write(img_data.read())
 
 
 @main.command()
@@ -443,36 +433,47 @@ def create_daily_overviews(
         if file.is_file():
             file.unlink()
     df = _read_and_validate_input_file(input_file)
+    # replace empty cells (Come to KITA) with -1.0
+    df = df.fillna(-1.0)
     for group, group_df in df.groupby("Group"):
         for no, day in enumerate(list(calendar.day_name)[:5], start=1):
-            day_df = group_df[
-                (group_df[f"{day}\nmorning"] == 1.0)
-                | (group_df[f"{day}\nafternoon"] == 1.0)
-            ]
-            day_df = day_df.replace(1.0, "Stay at home")
-            html_file_path = (
-                pathlib.Path(output_dir) / f"{group}_{no}_{day}.html"
-            )
-            df = day_df[
-                [
-                    "Name",
-                    "Group",
-                    f"{day}\nmorning",
-                    f"{day}\nafternoon",
+            for value, meaning in [
+                (1.0, "Stay at home"),
+                (-1.0, "Come to KITA"),
+            ]:
+                day_df = group_df[
+                    (group_df[f"{day}\nmorning"] == value)
+                    | (group_df[f"{day}\nafternoon"] == value)
                 ]
-            ].fillna("")
-            df.to_html(html_file_path, index=False)
-            pdf_file_path = html_file_path.with_suffix(".pdf")
-            options = {"encoding": "UTF-8", "user-style-sheet": "style.css"}
-            pdfkit.from_file(
-                input=str(html_file_path),
-                output_path=str(pdf_file_path),
-                options=options,
-                verbose=False,
-            )
-            docx_file_path = html_file_path.with_suffix(".docx")
-            dataframe_to_word(df, docx_file_path)
-            html_file_path.unlink()
+                day_df = day_df.replace(value, meaning)
+                day_df = day_df.replace(1.0, "")
+                day_df = day_df.replace(-1.0, "")
+                file_name = meaning.replace(" ", "_").lower()
+                file_name += f"_{group}_{no}_{day}.html"
+                html_file_path = pathlib.Path(output_dir) / file_name
+                df = day_df[
+                    [
+                        "Name",
+                        "Group",
+                        f"{day}\nmorning",
+                        f"{day}\nafternoon",
+                    ]
+                ].fillna("")
+                df.to_html(html_file_path, index=False)
+                pdf_file_path = html_file_path.with_suffix(".pdf")
+                options = {
+                    "encoding": "UTF-8",
+                    "user-style-sheet": "style.css",
+                }
+                pdfkit.from_file(
+                    input=str(html_file_path),
+                    output_path=str(pdf_file_path),
+                    options=options,
+                    verbose=False,
+                )
+                docx_file_path = html_file_path.with_suffix(".docx")
+                dataframe_to_word(df, docx_file_path)
+                html_file_path.unlink()
 
 
 if __name__ == "__main__":
