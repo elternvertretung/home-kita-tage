@@ -1,4 +1,5 @@
 on:
+  workflow_dispatch:
   schedule:
     # Explanation of the Cron Expression:
     # `*/5`: Every 5 minutes.
